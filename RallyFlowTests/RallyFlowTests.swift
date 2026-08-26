@@ -8,12 +8,17 @@
 import Testing
 @testable import RallyFlow
 
-struct RallyFlowTests {
+struct MatchTypeTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-        // Swift Testing Documentation
-        // https://developer.apple.com/documentation/testing
+    @Test
+    func singlesRequiresTwoPlayers() {
+        #expect(MatchType.singles.playersPerMatch == 2)
+        #expect(MatchType.singles.playersPerTeam == 1)
     }
 
+    @Test
+    func doublesRequiresFourPlayers() {
+        #expect(MatchType.doubles.playersPerMatch == 4)
+        #expect(MatchType.doubles.playersPerTeam == 2)
+    }
 }
