@@ -28,7 +28,7 @@ nonisolated struct TennisSetEngine: Sendable {
             throw ScoringEngineError.missingSetRules
         }
         guard state.setPhase == .regularGame else {
-            throw ScoringEngineError.tiebreakScoringRequired
+            throw ScoringEngineError.invalidTiebreakState
         }
         guard case .game(let gameWinner) = state.currentGame else {
             throw ScoringEngineError.gameNotComplete
@@ -70,6 +70,62 @@ nonisolated struct TennisSetEngine: Sendable {
             updatedState.setPhase = .regularGame
         }
 
+        return updatedState
+    }
+
+    /// Advances to the next set after a tiebreak has completed.
+    ///
+    /// - Parameters:
+    ///   - state: Tennis state containing the completed active tiebreak.
+    ///   - progress: The completed tiebreak result.
+    ///   - configuration: A tennis configuration containing tiebreak set rules.
+    /// - Returns: State reset for the first regular game of the next set.
+    /// - Throws: ``ScoringEngineError`` when the state or configuration is inconsistent.
+    nonisolated func advanceAfterCompletedTiebreak(
+        in state: TennisMatchScoreState,
+        progress: TiebreakProgress,
+        configuration: ScoringConfiguration
+    ) throws -> TennisMatchScoreState {
+        guard configuration.pointSystem == .tennis else {
+            throw ScoringEngineError.incompatiblePointSystem
+        }
+        guard case .bestOfSets(_, let setRules) = configuration.matchStructure,
+              let tiebreakAt = setRules.tiebreakAt,
+              setRules.tiebreakTarget != nil,
+              setRules.tiebreakWinBy != nil else {
+            throw ScoringEngineError.invalidTiebreakConfiguration
+        }
+        guard case let .completed(finalScore, winner) = progress,
+              case let .tiebreak(activeScore) = state.setPhase,
+              activeScore == finalScore,
+              state.teamAGames == tiebreakAt,
+              state.teamBGames == tiebreakAt else {
+            throw ScoringEngineError.invalidTiebreakState
+        }
+
+        let completedSet: SetScore
+        switch winner {
+        case .teamA:
+            completedSet = SetScore(
+                teamAGames: state.teamAGames + 1,
+                teamBGames: state.teamBGames,
+                tiebreakScore: finalScore
+            )
+        case .teamB:
+            completedSet = SetScore(
+                teamAGames: state.teamAGames,
+                teamBGames: state.teamBGames + 1,
+                tiebreakScore: finalScore
+            )
+        }
+
+        var updatedState = state
+        updatedState.completedSets.append(completedSet)
+        updatedState.teamAGames = 0
+        updatedState.teamBGames = 0
+        updatedState.currentGame = .points(teamA: .love, teamB: .love)
+        updatedState.currentSetIndex += 1
+        updatedState.setPhase = .regularGame
         return updatedState
     }
 }

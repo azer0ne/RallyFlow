@@ -82,7 +82,7 @@ nonisolated struct TennisSetEngineTests {
     }
 
     @Test
-    func rejectsRegularRallyWhenTiebreakIsRequired() throws {
+    func beginsTiebreakWhenTiebreakIsRequired() throws {
         let rules = SetRules(
             gamesToWin: 6,
             winByGames: 2,
@@ -97,13 +97,20 @@ nonisolated struct TennisSetEngineTests {
             setPhase: .tiebreakRequired
         )
 
-        #expect(throws: ScoringEngineError.tiebreakScoringRequired) {
-            try TennisScoringEngine().apply(
-                event: .teamAWonRally,
-                to: .tennis(state),
-                configuration: configuration
-            )
+        let updated = try TennisScoringEngine().apply(
+            event: .teamAWonRally,
+            to: .tennis(state),
+            configuration: configuration
+        )
+
+        guard case let .tennis(tennisState) = updated,
+              case let .tiebreak(score) = tennisState.setPhase else {
+            Issue.record("Expected an active tiebreak")
+            return
         }
+
+        #expect(score.teamAPoints == 1)
+        #expect(score.teamBPoints == 0)
     }
 
     @Test

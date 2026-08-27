@@ -12,4 +12,7 @@ nonisolated enum SetPhase: Codable, Hashable, Sendable {
 
     /// The configured tied game score has been reached and requires a tiebreak.
     case tiebreakRequired
+
+    /// A tiebreak is actively being scored.
+    case tiebreak(TiebreakScore)
 }

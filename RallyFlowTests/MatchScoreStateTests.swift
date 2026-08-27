@@ -26,6 +26,7 @@ struct MatchScoreStateTests {
         #expect(tennisState.currentGameIndex == 0)
         #expect(tennisState.currentSetIndex == 0)
         #expect(tennisState.setPhase == .regularGame)
+        #expect(tennisState.tiebreakStartingServer == .teamA)
         #expect(!tennisState.isMatchComplete)
     }
 
