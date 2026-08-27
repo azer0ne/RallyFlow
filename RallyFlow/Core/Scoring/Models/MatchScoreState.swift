@@ -40,6 +40,11 @@ nonisolated struct TennisMatchScoreState: Codable, Hashable, Sendable {
     /// The scoring phase of the current set.
     var setPhase: SetPhase
 
+    /// The team configured to serve the first point of the next tiebreak.
+    ///
+    /// This focused value is used until general match server tracking is introduced.
+    var tiebreakStartingServer: TeamSide
+
     /// Whether the match has reached its configured ending condition.
     var isMatchComplete: Bool
 
@@ -52,6 +57,7 @@ nonisolated struct TennisMatchScoreState: Codable, Hashable, Sendable {
         currentGameIndex: Int = 0,
         currentSetIndex: Int = 0,
         setPhase: SetPhase = .regularGame,
+        tiebreakStartingServer: TeamSide = .teamA,
         isMatchComplete: Bool = false
     ) {
         self.currentGame = currentGame
@@ -61,6 +67,7 @@ nonisolated struct TennisMatchScoreState: Codable, Hashable, Sendable {
         self.currentGameIndex = currentGameIndex
         self.currentSetIndex = currentSetIndex
         self.setPhase = setPhase
+        self.tiebreakStartingServer = tiebreakStartingServer
         self.isMatchComplete = isMatchComplete
     }
 }

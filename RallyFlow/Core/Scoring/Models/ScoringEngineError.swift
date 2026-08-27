@@ -28,6 +28,12 @@ nonisolated enum ScoringEngineError: Error, Equatable, Sendable {
     /// Set progression was requested before the current game completed.
     case gameNotComplete
 
-    /// The current set requires tiebreak scoring, which is not yet supported.
-    case tiebreakScoringRequired
+    /// Tiebreak scoring rules are missing or invalid.
+    case invalidTiebreakConfiguration
+
+    /// Tiebreak progression was requested from an inconsistent set state.
+    case invalidTiebreakState
+
+    /// A scoring event was applied after the supplied tiebreak had completed.
+    case tiebreakAlreadyComplete
 }

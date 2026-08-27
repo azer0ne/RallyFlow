@@ -30,12 +30,51 @@ nonisolated struct TennisScoringEngine: ScoringEngine {
         guard configuration.pointSystem == .tennis else {
             throw ScoringEngineError.incompatiblePointSystem
         }
-        guard case .tennis(var tennisState) = state else {
+        guard case .tennis(let tennisState) = state else {
             throw ScoringEngineError.incompatibleScoreState
         }
-        guard tennisState.setPhase == .regularGame else {
-            throw ScoringEngineError.tiebreakScoringRequired
+
+        switch tennisState.setPhase {
+        case .regularGame:
+            return .tennis(
+                try applyRegularGame(
+                    event: event,
+                    to: tennisState,
+                    configuration: configuration
+                )
+            )
+        case .tiebreakRequired:
+            let initialScore = TiebreakScore(
+                startingServer: tennisState.tiebreakStartingServer
+            )
+            return .tennis(
+                try applyTiebreak(
+                    event: event,
+                    score: initialScore,
+                    to: tennisState,
+                    configuration: configuration
+                )
+            )
+        case .tiebreak(let score):
+            return .tennis(
+                try applyTiebreak(
+                    event: event,
+                    score: score,
+                    to: tennisState,
+                    configuration: configuration
+                )
+            )
         }
+    }
+}
+
+private extension TennisScoringEngine {
+    /// Applies one rally using regular tennis-game point notation.
+    nonisolated func applyRegularGame(
+        event: ScoreEvent,
+        to state: TennisMatchScoreState,
+        configuration: ScoringConfiguration
+    ) throws -> TennisMatchScoreState {
         guard let deuceRule = configuration.deuceRule else {
             throw ScoringEngineError.missingDeuceRule
         }
@@ -50,29 +89,63 @@ nonisolated struct TennisScoringEngine: ScoringEngine {
             throw ScoringEngineError.unsupportedEvent
         }
 
-        guard case .game = tennisState.currentGame else {
-            let updatedGame = try score(
+        guard case .game = state.currentGame else {
+            var updatedState = state
+            updatedState.currentGame = try score(
                 afterRallyWonBy: rallyWinner,
-                currentScore: tennisState.currentGame,
+                currentScore: state.currentGame,
                 deuceRule: deuceRule
             )
-            tennisState.currentGame = updatedGame
 
-            if case .game = updatedGame {
-                tennisState = try TennisSetEngine().advanceAfterCompletedGame(
-                    in: tennisState,
+            if case .game = updatedState.currentGame {
+                updatedState = try TennisSetEngine().advanceAfterCompletedGame(
+                    in: updatedState,
                     configuration: configuration
                 )
             }
 
-            return .tennis(tennisState)
+            return updatedState
         }
 
         throw ScoringEngineError.gameAlreadyComplete
     }
-}
 
-private extension TennisScoringEngine {
+    /// Applies one rally to a required or active tiebreak.
+    nonisolated func applyTiebreak(
+        event: ScoreEvent,
+        score: TiebreakScore,
+        to state: TennisMatchScoreState,
+        configuration: ScoringConfiguration
+    ) throws -> TennisMatchScoreState {
+        guard case .bestOfSets(_, let setRules) = configuration.matchStructure,
+              let target = setRules.tiebreakTarget,
+              let winBy = setRules.tiebreakWinBy else {
+            throw ScoringEngineError.invalidTiebreakConfiguration
+        }
+
+        let progress = try TennisTiebreakEngine().apply(
+            event: event,
+            to: score,
+            target: target,
+            winBy: winBy
+        )
+
+        var updatedState = state
+        switch progress {
+        case .inProgress(let updatedScore):
+            updatedState.setPhase = .tiebreak(updatedScore)
+            return updatedState
+
+        case .completed(let finalScore, _):
+            updatedState.setPhase = .tiebreak(finalScore)
+            return try TennisSetEngine().advanceAfterCompletedTiebreak(
+                in: updatedState,
+                progress: progress,
+                configuration: configuration
+            )
+        }
+    }
+
     /// Returns the game score after one team wins a rally.
     nonisolated func score(
         afterRallyWonBy rallyWinner: TeamSide,
