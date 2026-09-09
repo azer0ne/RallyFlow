@@ -10,6 +10,9 @@ nonisolated enum ScoringConfigurationError: Error, Equatable, Sendable {
     /// A game or set count is not positive.
     case invalidCount
 
+    /// A best-of-sets count is not a positive odd number.
+    case invalidBestOfCount
+
     /// A point or game target is not positive.
     case invalidTarget
 

@@ -277,7 +277,7 @@ nonisolated struct TennisSetEngineTests {
     }
 
     @Test
-    func preservesEarlierSetWhenSecondSetCompletes() throws {
+    func preservesEarlierSetWhenSecondSetCompletesMatch() throws {
         let firstSet = SetScore(teamAGames: 6, teamBGames: 4)
         let state = TennisMatchScoreState(
             currentGame: .points(teamA: .forty, teamB: .love),
@@ -301,7 +301,7 @@ nonisolated struct TennisSetEngineTests {
         #expect(updated.currentGame == .points(teamA: .love, teamB: .love))
         #expect(updated.currentGameIndex == 12)
         #expect(updated.currentSetIndex == 2)
-        #expect(!updated.isMatchComplete)
+        #expect(updated.isMatchComplete)
     }
 
     @Test

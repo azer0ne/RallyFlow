@@ -5,7 +5,7 @@
 //  Created by Arez on 24/08/26.
 //
 
-/// A deterministic engine for tennis point, game, and set progression.
+/// A deterministic engine for tennis point, game, set, and match progression.
 nonisolated struct TennisScoringEngine: ScoringEngine {
     /// Creates a stateless tennis scoring engine.
     init() {}
@@ -13,8 +13,8 @@ nonisolated struct TennisScoringEngine: ScoringEngine {
     /// Returns the tennis state produced by awarding one rally to a team.
     ///
     /// A rally that completes a regular game is passed directly to the set engine,
-    /// so callers receive state prepared for the next game, set, or tiebreak.
-    /// Overall match completion remains unchanged.
+    /// so callers receive state prepared for the next game, set, tiebreak, or
+    /// completed match.
     ///
     /// - Parameters:
     ///   - event: The rally-winning event to process.
@@ -32,6 +32,9 @@ nonisolated struct TennisScoringEngine: ScoringEngine {
         }
         guard case .tennis(let tennisState) = state else {
             throw ScoringEngineError.incompatibleScoreState
+        }
+        guard !tennisState.isMatchComplete else {
+            throw ScoringEngineError.matchAlreadyCompleted
         }
 
         switch tennisState.setPhase {
@@ -98,10 +101,17 @@ private extension TennisScoringEngine {
             )
 
             if case .game = updatedState.currentGame {
+                let completedSetCount = updatedState.completedSets.count
                 updatedState = try TennisSetEngine().advanceAfterCompletedGame(
                     in: updatedState,
                     configuration: configuration
                 )
+                if updatedState.completedSets.count > completedSetCount {
+                    updatedState = try TennisMatchEngine().evaluateAfterCompletedSet(
+                        in: updatedState,
+                        configuration: configuration
+                    )
+                }
             }
 
             return updatedState
@@ -138,9 +148,13 @@ private extension TennisScoringEngine {
 
         case .completed(let finalScore, _):
             updatedState.setPhase = .tiebreak(finalScore)
-            return try TennisSetEngine().advanceAfterCompletedTiebreak(
+            updatedState = try TennisSetEngine().advanceAfterCompletedTiebreak(
                 in: updatedState,
                 progress: progress,
+                configuration: configuration
+            )
+            return try TennisMatchEngine().evaluateAfterCompletedSet(
+                in: updatedState,
                 configuration: configuration
             )
         }

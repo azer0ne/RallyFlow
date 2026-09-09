@@ -36,4 +36,13 @@ nonisolated enum ScoringEngineError: Error, Equatable, Sendable {
 
     /// A scoring event was applied after the supplied tiebreak had completed.
     case tiebreakAlreadyComplete
+
+    /// A scoring event was applied after the match completed.
+    case matchAlreadyCompleted
+
+    /// A completed set does not identify exactly one winner.
+    case invalidCompletedSet
+
+    /// Completed-set data is inconsistent with the configured match structure.
+    case invalidMatchState
 }

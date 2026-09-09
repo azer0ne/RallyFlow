@@ -113,6 +113,9 @@ private extension MatchStructure {
             guard count > 0 else {
                 throw ScoringConfigurationError.invalidCount
             }
+            guard count.isMultiple(of: 2) == false else {
+                throw ScoringConfigurationError.invalidBestOfCount
+            }
             try setRules.validate()
 
         case let .raceToPoints(target, winBy, cap):
