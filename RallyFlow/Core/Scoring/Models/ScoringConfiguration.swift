@@ -7,36 +7,14 @@
 
 import Foundation
 
-/// A composition of the rules required to score a match.
 nonisolated struct ScoringConfiguration: Codable, Hashable, Sendable {
-    /// The high-level scoring family.
     let style: ScoringStyle
-
-    /// The system used to count points.
     let pointSystem: PointSystem
-
-    /// The structure that determines when the match ends.
     let matchStructure: MatchStructure
-
-    /// The rule used to resolve deuce, when applicable.
     let deuceRule: DeuceRule?
-
-    /// The rule used to resolve a final tie, when applicable.
     let tieRule: TieRule?
-
-    /// The match's serving structure.
     let servingRule: ServingRule
-
-    /// Creates a validated scoring configuration.
-    ///
-    /// - Parameters:
-    ///   - style: The high-level scoring family.
-    ///   - pointSystem: The point-counting system.
-    ///   - matchStructure: The structure that determines when the match ends.
-    ///   - deuceRule: The rule used to resolve deuce, when applicable.
-    ///   - tieRule: The rule used to resolve a final tie, when applicable.
-    ///   - servingRule: The match's serving structure.
-    /// - Throws: ``ScoringConfigurationError`` when a numeric rule is invalid.
+    
     init(
         style: ScoringStyle,
         pointSystem: PointSystem,
@@ -47,7 +25,19 @@ nonisolated struct ScoringConfiguration: Codable, Hashable, Sendable {
     ) throws {
         try matchStructure.validate()
         try tieRule?.validate()
-
+        if servingRule == .eachDoublesPlayerServesOnce {
+            guard pointSystem == .tennis, style == .tennis,
+                  matchStructure == .fixedGames(count: 4), deuceRule != nil else {
+                throw ScoringConfigurationError.invalidOneServeEachRules
+            }
+            switch tieRule {
+            case .draw?, .tiebreak?:
+                break
+            default:
+                throw ScoringConfigurationError.invalidOneServeEachRules
+            }
+        }
+        
         self.style = style
         self.pointSystem = pointSystem
         self.matchStructure = matchStructure
@@ -55,11 +45,7 @@ nonisolated struct ScoringConfiguration: Codable, Hashable, Sendable {
         self.tieRule = tieRule
         self.servingRule = servingRule
     }
-
-    /// Creates a validated scoring configuration by decoding serialized data.
-    ///
-    /// - Parameter decoder: The decoder containing the serialized configuration.
-    /// - Throws: A decoding error when the data is malformed or contains invalid rules.
+    
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let style = try container.decode(ScoringStyle.self, forKey: .style)
@@ -68,7 +54,7 @@ nonisolated struct ScoringConfiguration: Codable, Hashable, Sendable {
         let deuceRule = try container.decodeIfPresent(DeuceRule.self, forKey: .deuceRule)
         let tieRule = try container.decodeIfPresent(TieRule.self, forKey: .tieRule)
         let servingRule = try container.decode(ServingRule.self, forKey: .servingRule)
-
+        
         do {
             try self.init(
                 style: style,
@@ -90,25 +76,28 @@ nonisolated struct ScoringConfiguration: Codable, Hashable, Sendable {
 }
 
 private extension MatchStructure {
-    /// Validates numeric values that would make the structure impossible to play.
+    
     nonisolated func validate() throws {
         switch self {
         case .fixedGames(let count):
             guard count > 0 else {
                 throw ScoringConfigurationError.invalidCount
             }
-
+            
         case .raceToGames(let target):
             guard target > 0 else {
                 throw ScoringConfigurationError.invalidTarget
             }
-
+            
         case let .bestOfGames(count, pointsPerGame, winBy, cap):
             guard count > 0 else {
                 throw ScoringConfigurationError.invalidCount
             }
+            guard !count.isMultiple(of: 2) else {
+                throw ScoringConfigurationError.invalidBestOfCount
+            }
             try validatePointTarget(pointsPerGame, winBy: winBy, cap: cap)
-
+            
         case let .bestOfSets(count, setRules):
             guard count > 0 else {
                 throw ScoringConfigurationError.invalidCount
@@ -117,23 +106,23 @@ private extension MatchStructure {
                 throw ScoringConfigurationError.invalidBestOfCount
             }
             try setRules.validate()
-
+            
         case let .raceToPoints(target, winBy, cap):
             try validatePointTarget(target, winBy: winBy, cap: cap)
-
+            
         case .fixedTotalPoints(let total):
             guard total > 0 else {
                 throw ScoringConfigurationError.invalidTarget
             }
-
+            
         case .timed(let durationSeconds):
             guard durationSeconds > 0 else {
                 throw ScoringConfigurationError.invalidDuration
             }
         }
     }
-
-    /// Validates a point target, winning margin, and optional cap.
+    
+    
     nonisolated func validatePointTarget(_ target: Int, winBy: Int, cap: Int?) throws {
         guard target > 0 else {
             throw ScoringConfigurationError.invalidTarget
@@ -153,7 +142,7 @@ private extension SetRules {
         guard gamesToWin > 0, winByGames > 0 else {
             throw ScoringConfigurationError.invalidSetRules
         }
-
+        
         switch (tiebreakAt, tiebreakTarget, tiebreakWinBy) {
         case (nil, nil, nil):
             return
@@ -167,7 +156,7 @@ private extension SetRules {
 }
 
 private extension TieRule {
-    /// Validates associated numeric tie-breaking values.
+    
     nonisolated func validate() throws {
         switch self {
         case .draw, .decidingGame:
