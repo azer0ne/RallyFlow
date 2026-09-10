@@ -236,7 +236,7 @@ nonisolated struct TennisTiebreakEngineTests {
     }
 
     @Test
-    func preservesEarlierCompletedSetWhenTiebreakCompletes() throws {
+    func preservesEarlierCompletedSetWhenTiebreakCompletesMatch() throws {
         let firstSet = SetScore(teamAGames: 6, teamBGames: 3)
         let finalInput = TiebreakScore(
             teamAPoints: 6,
@@ -260,7 +260,7 @@ nonisolated struct TennisTiebreakEngineTests {
         #expect(updated.completedSets[1].tiebreakScore?.teamAPoints == 7)
         #expect(updated.completedSets[1].tiebreakScore?.teamBPoints == 4)
         #expect(updated.currentSetIndex == 2)
-        #expect(!updated.isMatchComplete)
+        #expect(updated.isMatchComplete)
     }
 
     @Test

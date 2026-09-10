@@ -109,4 +109,57 @@ struct ScoringConfigurationTests {
             )
         }
     }
+
+    @Test(arguments: [2, 4])
+    func rejectsEvenBestOfSetCounts(_ count: Int) {
+        #expect(throws: ScoringConfigurationError.invalidBestOfCount) {
+            try ScoringConfiguration(
+                style: .tennis,
+                pointSystem: .tennis,
+                matchStructure: .bestOfSets(
+                    count: count,
+                    setRules: SetRules(gamesToWin: 6, winByGames: 2)
+                ),
+                deuceRule: .advantage,
+                servingRule: .standard
+            )
+        }
+    }
+
+    @Test(arguments: [0, -1])
+    func rejectsNonpositiveBestOfSetCounts(_ count: Int) {
+        #expect(throws: ScoringConfigurationError.invalidCount) {
+            try ScoringConfiguration(
+                style: .tennis,
+                pointSystem: .tennis,
+                matchStructure: .bestOfSets(
+                    count: count,
+                    setRules: SetRules(gamesToWin: 6, winByGames: 2)
+                ),
+                deuceRule: .advantage,
+                servingRule: .standard
+            )
+        }
+    }
+
+    @Test(arguments: [1, 3, 5])
+    func acceptsPositiveOddBestOfSetCounts(_ count: Int) throws {
+        let configuration = try ScoringConfiguration(
+            style: .tennis,
+            pointSystem: .tennis,
+            matchStructure: .bestOfSets(
+                count: count,
+                setRules: SetRules(gamesToWin: 6, winByGames: 2)
+            ),
+            deuceRule: .advantage,
+            servingRule: .standard
+        )
+
+        #expect(
+            configuration.matchStructure == .bestOfSets(
+                count: count,
+                setRules: SetRules(gamesToWin: 6, winByGames: 2)
+            )
+        )
+    }
 }

@@ -5,18 +5,10 @@
 //  Created by Arez on 24/08/26.
 //
 
-/// A deterministic engine for progressing games within a configured tennis set.
 nonisolated struct TennisSetEngine: Sendable {
-    /// Creates a stateless tennis set engine.
+    
     init() {}
-
-    /// Advances set state after the current game has completed.
-    ///
-    /// - Parameters:
-    ///   - state: Tennis state whose current game contains a winner.
-    ///   - configuration: A tennis configuration containing set rules.
-    /// - Returns: State prepared for the next regular game, next set, or tiebreak.
-    /// - Throws: ``ScoringEngineError`` when the state or configuration is incompatible.
+    
     nonisolated func advanceAfterCompletedGame(
         in state: TennisMatchScoreState,
         configuration: ScoringConfiguration
@@ -33,7 +25,7 @@ nonisolated struct TennisSetEngine: Sendable {
         guard case .game(let gameWinner) = state.currentGame else {
             throw ScoringEngineError.gameNotComplete
         }
-
+        
         var updatedState = state
         switch gameWinner {
         case .teamA:
@@ -43,7 +35,7 @@ nonisolated struct TennisSetEngine: Sendable {
         }
         updatedState.currentGameIndex += 1
         updatedState.currentGame = .points(teamA: .love, teamB: .love)
-
+        
         if requiresTiebreak(
             teamAGames: updatedState.teamAGames,
             teamBGames: updatedState.teamBGames,
@@ -52,7 +44,7 @@ nonisolated struct TennisSetEngine: Sendable {
             updatedState.setPhase = .tiebreakRequired
             return updatedState
         }
-
+        
         if isSetComplete(
             teamAGames: updatedState.teamAGames,
             teamBGames: updatedState.teamBGames,
@@ -69,18 +61,10 @@ nonisolated struct TennisSetEngine: Sendable {
             updatedState.currentSetIndex += 1
             updatedState.setPhase = .regularGame
         }
-
+        
         return updatedState
     }
-
-    /// Advances to the next set after a tiebreak has completed.
-    ///
-    /// - Parameters:
-    ///   - state: Tennis state containing the completed active tiebreak.
-    ///   - progress: The completed tiebreak result.
-    ///   - configuration: A tennis configuration containing tiebreak set rules.
-    /// - Returns: State reset for the first regular game of the next set.
-    /// - Throws: ``ScoringEngineError`` when the state or configuration is inconsistent.
+    
     nonisolated func advanceAfterCompletedTiebreak(
         in state: TennisMatchScoreState,
         progress: TiebreakProgress,
@@ -102,7 +86,7 @@ nonisolated struct TennisSetEngine: Sendable {
               state.teamBGames == tiebreakAt else {
             throw ScoringEngineError.invalidTiebreakState
         }
-
+        
         let completedSet: SetScore
         switch winner {
         case .teamA:
@@ -118,7 +102,7 @@ nonisolated struct TennisSetEngine: Sendable {
                 tiebreakScore: finalScore
             )
         }
-
+        
         var updatedState = state
         updatedState.completedSets.append(completedSet)
         updatedState.teamAGames = 0
@@ -131,7 +115,6 @@ nonisolated struct TennisSetEngine: Sendable {
 }
 
 private extension TennisSetEngine {
-    /// Returns whether the current set score has reached its configured tiebreak score.
     nonisolated func requiresTiebreak(
         teamAGames: Int,
         teamBGames: Int,
@@ -142,8 +125,7 @@ private extension TennisSetEngine {
         }
         return teamAGames == tiebreakAt && teamBGames == tiebreakAt
     }
-
-    /// Returns whether either team has won the current set.
+    
     nonisolated func isSetComplete(
         teamAGames: Int,
         teamBGames: Int,
