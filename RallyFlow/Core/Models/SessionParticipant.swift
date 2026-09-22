@@ -8,7 +8,7 @@
 import Foundation
 
 /// Session-specific state for a participating player.
-struct SessionParticipant: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct SessionParticipant: Identifiable, Codable, Hashable, Sendable {
     /// The participant record's stable identifier.
     let id: UUID
 

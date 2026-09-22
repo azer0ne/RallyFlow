@@ -1,0 +1,131 @@
+import Foundation
+
+/// Enumerates every structurally valid matchup from a matchmaking request.
+nonisolated struct MatchCandidateGenerator: Sendable {
+    /// Returns all legal candidates in stable participant-input order.
+    ///
+    /// Immediate requests always require `ready` status. Upcoming requests may use
+    /// an explicit player set so later scheduling policy can include active players.
+    /// Repeated participant records for the same player are represented once.
+    func candidates(for request: MatchmakingRequest) -> [MatchCandidate] {
+        let playerIDs = eligiblePlayerIDs(for: request)
+
+        switch request.matchType {
+        case .singles:
+            return singlesCandidates(from: playerIDs)
+        case .doubles:
+            return doublesCandidates(from: playerIDs)
+        }
+    }
+
+    private func eligiblePlayerIDs(for request: MatchmakingRequest) -> [Player.ID] {
+        var seenPlayerIDs: Set<Player.ID> = []
+
+        return request.participants.compactMap { participant in
+            guard isEligible(participant, for: request),
+                  seenPlayerIDs.insert(participant.playerID).inserted else {
+                return nil
+            }
+            return participant.playerID
+        }
+    }
+
+    private func isEligible(
+        _ participant: SessionParticipant,
+        for request: MatchmakingRequest
+    ) -> Bool {
+        switch request.schedulingContext {
+        case .immediate:
+            guard participant.status == .ready else { return false }
+            return request.eligibility.includes(participant.playerID)
+        case .upcoming:
+            return request.eligibility.includes(participant.playerID)
+        }
+    }
+
+    private func singlesCandidates(from playerIDs: [Player.ID]) -> [MatchCandidate] {
+        guard playerIDs.count >= MatchType.singles.playersPerMatch else { return [] }
+
+        var candidates: [MatchCandidate] = []
+        for firstIndex in 0..<(playerIDs.count - 1) {
+            for secondIndex in (firstIndex + 1)..<playerIDs.count {
+                candidates.append(
+                    makeCandidate(
+                        matchType: .singles,
+                        teamAPlayerIDs: [playerIDs[firstIndex]],
+                        teamBPlayerIDs: [playerIDs[secondIndex]]
+                    )
+                )
+            }
+        }
+        return candidates
+    }
+
+    private func doublesCandidates(from playerIDs: [Player.ID]) -> [MatchCandidate] {
+        guard playerIDs.count >= MatchType.doubles.playersPerMatch else { return [] }
+
+        var candidates: [MatchCandidate] = []
+        for firstIndex in 0..<(playerIDs.count - 3) {
+            for secondIndex in (firstIndex + 1)..<(playerIDs.count - 2) {
+                for thirdIndex in (secondIndex + 1)..<(playerIDs.count - 1) {
+                    for fourthIndex in (thirdIndex + 1)..<playerIDs.count {
+                        let first = playerIDs[firstIndex]
+                        let second = playerIDs[secondIndex]
+                        let third = playerIDs[thirdIndex]
+                        let fourth = playerIDs[fourthIndex]
+
+                        candidates.append(
+                            makeCandidate(
+                                matchType: .doubles,
+                                teamAPlayerIDs: [first, second],
+                                teamBPlayerIDs: [third, fourth]
+                            )
+                        )
+                        candidates.append(
+                            makeCandidate(
+                                matchType: .doubles,
+                                teamAPlayerIDs: [first, third],
+                                teamBPlayerIDs: [second, fourth]
+                            )
+                        )
+                        candidates.append(
+                            makeCandidate(
+                                matchType: .doubles,
+                                teamAPlayerIDs: [first, fourth],
+                                teamBPlayerIDs: [second, third]
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return candidates
+    }
+
+    private func makeCandidate(
+        matchType: MatchType,
+        teamAPlayerIDs: [Player.ID],
+        teamBPlayerIDs: [Player.ID]
+    ) -> MatchCandidate {
+        do {
+            return try MatchCandidate(
+                matchType: matchType,
+                teamA: Team(playerIDs: teamAPlayerIDs),
+                teamB: Team(playerIDs: teamBPlayerIDs)
+            )
+        } catch {
+            preconditionFailure("Candidate enumeration produced an invalid player grouping.")
+        }
+    }
+}
+
+nonisolated private extension MatchmakingEligibility {
+    func includes(_ playerID: Player.ID) -> Bool {
+        switch self {
+        case .readyParticipants:
+            return true
+        case .explicit(let playerIDs):
+            return playerIDs.contains(playerID)
+        }
+    }
+}

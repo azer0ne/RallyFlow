@@ -6,7 +6,7 @@
 //
 
 /// The lifecycle state of a match.
-enum MatchStatus: String, Codable, Sendable {
+nonisolated enum MatchStatus: String, Codable, Sendable {
     /// Generated as a possible match.
     case suggested
 

@@ -8,7 +8,7 @@
 import Foundation
 
 /// A grouping of players participating together in a match.
-struct Team: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct Team: Identifiable, Codable, Hashable, Sendable {
     /// The team's stable identifier.
     let id: UUID
 

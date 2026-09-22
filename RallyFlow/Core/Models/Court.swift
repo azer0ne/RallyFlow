@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Court: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct Court: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var name: String
     

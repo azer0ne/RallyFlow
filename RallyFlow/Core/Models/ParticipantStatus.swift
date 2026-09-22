@@ -6,7 +6,7 @@
 //
 
 /// A participant's availability within a session.
-enum ParticipantStatus: String, Codable, Sendable {
+nonisolated enum ParticipantStatus: String, Codable, Sendable {
     /// Eligible to play immediately.
     case ready
 

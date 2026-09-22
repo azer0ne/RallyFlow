@@ -8,7 +8,7 @@
 import Foundation
 
 /// Reusable identity and profile data for a player.
-struct Player: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct Player: Identifiable, Codable, Hashable, Sendable {
     /// The player's stable identifier.
     let id: UUID
 

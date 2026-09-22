@@ -6,7 +6,7 @@
 //
 
 /// A racket sport supported by RallyFlow.
-enum Sport: String, Codable, CaseIterable, Sendable {
+nonisolated enum Sport: String, Codable, CaseIterable, Sendable {
     /// Tennis.
     case tennis
 

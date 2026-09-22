@@ -6,7 +6,7 @@
 //
 
 /// The time horizon for which a match is being scheduled.
-enum SchedulingContext: Sendable {
+nonisolated enum SchedulingContext: String, Codable, Hashable, Sendable {
     /// A match that can begin now.
     case immediate
 

@@ -6,7 +6,7 @@
 //
 
 /// The result data required before a match can be generated.
-enum MatchGenerationDependency: String, Codable, Sendable {
+nonisolated enum MatchGenerationDependency: String, Codable, Sendable {
     /// Match generation does not depend on the current match result.
     case independentOfCurrentResult
 

@@ -6,7 +6,7 @@
 //
 
 /// The number of teams and players participating in a match.
-enum MatchType: String, Codable, CaseIterable, Sendable {
+nonisolated enum MatchType: String, Codable, CaseIterable, Hashable, Sendable {
     /// A match with one player on each team.
     case singles
 

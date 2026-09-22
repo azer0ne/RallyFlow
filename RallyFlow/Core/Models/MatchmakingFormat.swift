@@ -6,7 +6,7 @@
 //
 
 /// A strategy category for arranging participants into matches.
-enum MatchmakingFormat: String, Codable, CaseIterable, Sendable {
+nonisolated enum MatchmakingFormat: String, Codable, CaseIterable, Sendable {
     /// Balances play and rest opportunities socially.
     case fairSocialRotation
 
