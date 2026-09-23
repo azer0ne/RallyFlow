@@ -26,18 +26,23 @@ nonisolated struct MatchmakingRequest: Codable, Hashable, Sendable {
     /// Completed-match facts available to later candidate evaluation.
     let history: ParticipantMatchHistory
 
+    /// Explicit simultaneous capacity for policies that depend on waiting expectations.
+    let capacity: MatchmakingCapacity?
+
     /// Creates a candidate-generation request.
     init(
         matchType: MatchType,
         schedulingContext: SchedulingContext,
         participants: [SessionParticipant],
         eligibility: MatchmakingEligibility = .readyParticipants,
-        history: ParticipantMatchHistory = ParticipantMatchHistory()
+        history: ParticipantMatchHistory = ParticipantMatchHistory(),
+        capacity: MatchmakingCapacity? = nil
     ) {
         self.matchType = matchType
         self.schedulingContext = schedulingContext
         self.participants = participants
         self.eligibility = eligibility
         self.history = history
+        self.capacity = capacity
     }
 }
