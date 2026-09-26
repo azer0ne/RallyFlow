@@ -28,7 +28,18 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
             throw FairRotationRankingError.invalidProjectionContext
         }
         guard !candidates.isEmpty else { return [] }
-        
+        return try assessment(candidates: candidates, request: request, projection: projection).suggestions
+    }
+
+    /// Shares one validated history snapshot and comparison policy with exact batch search.
+    func assessment(
+        candidates: [MatchCandidate],
+        request: MatchmakingRequest,
+        projection: UpcomingParticipationProjection?
+    ) throws -> FairRotationAssessment {
+        if projection != nil, request.schedulingContext != .upcoming {
+            throw FairRotationRankingError.invalidProjectionContext
+        }
         let participantByPlayerID = try validatedParticipants(request.participants)
         let eligibleParticipants = request.participants.filter {
             request.isEligible($0)
@@ -77,13 +88,19 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
         }
         let explanationContext = ExplanationContext(evaluations: evaluations)
         
-        return evaluations.sorted(by: isHigherPriority).map {
+        let sortedEvaluations = evaluations.sorted(by: isHigherPriority)
+        let suggestions = sortedEvaluations.map {
             MatchSuggestion(
                 candidate: $0.candidate,
                 reasons: reasons(for: $0, context: explanationContext),
                 warnings: warnings(for: $0)
             )
         }
+        return FairRotationAssessment(
+            suggestions: suggestions, evaluations: sortedEvaluations,
+            eligibleParticipants: eligibleParticipants, history: historySnapshot,
+            waitingThreshold: waitingThreshold
+        )
     }
 }
 
@@ -141,6 +158,33 @@ nonisolated private extension FairRotationCandidateRanker {
         waitingThreshold: WaitingThreshold
     ) -> CandidateEvaluation {
         let selectedPlayerIDs = Set(candidate.playerIDs)
+        let participation = participation(
+            selectedPlayerIDs: selectedPlayerIDs, eligibleParticipants: eligibleParticipants,
+            history: history, waitingThreshold: waitingThreshold
+        )
+        return CandidateEvaluation(
+            candidate: candidate,
+            primaryPriority: participation.primaryPriority,
+            maximumMatchDeficit: participation.maximumMatchDeficit,
+            maximumWaitingExcess: participation.maximumWaitingExcess,
+            maximumSelectedRest: participation.maximumSelectedRest,
+            partnerRepetition: partnerRepetition(for: candidate, history: history),
+            opponentRepetition: opponentRepetition(for: candidate, history: history),
+            consecutivePlayCount: candidate.playerIDs.count { playerID in
+                let participant = eligibleParticipants.first { $0.playerID == playerID }
+                return history.statistics(for: playerID).consecutiveMatches > 0
+                || participant?.status == .playing
+            },
+            canonicalKey: canonicalKey(for: candidate)
+        )
+    }
+
+    func participation(
+        selectedPlayerIDs: Set<Player.ID>,
+        eligibleParticipants: [SessionParticipant],
+        history: HistorySnapshot,
+        waitingThreshold: WaitingThreshold
+    ) -> ParticipationEvaluation {
         let projectedMatchCounts = eligibleParticipants.map { participant in
             history.statistics(for: participant.playerID).matchesPlayed
             + (selectedPlayerIDs.contains(participant.playerID) ? 1 : 0)
@@ -180,24 +224,15 @@ nonisolated private extension FairRotationCandidateRanker {
         ? 0
         : primaryDeficits.count { $0 == worstPrimaryDeficit }
         
-        return CandidateEvaluation(
-            candidate: candidate,
-            primaryPriority: PrimaryPriority(
+        return ParticipationEvaluation(
+            primaryPriority: FairRotationPrimaryPriority(
                 worstDeficit: worstPrimaryDeficit,
                 participantsAtWorstDeficit: participantsAtWorstDeficit,
                 aggregateDeficit: aggregatePrimaryDeficit
             ),
             maximumMatchDeficit: maximumMatchDeficit,
             maximumWaitingExcess: maximumWaitingExcess,
-            maximumSelectedRest: maximumSelectedRest,
-            partnerRepetition: partnerRepetition(for: candidate, history: history),
-            opponentRepetition: opponentRepetition(for: candidate, history: history),
-            consecutivePlayCount: candidate.playerIDs.count { playerID in
-                let participant = eligibleParticipants.first { $0.playerID == playerID }
-                return history.statistics(for: playerID).consecutiveMatches > 0
-                || participant?.status == .playing
-            },
-            canonicalKey: canonicalKey(for: candidate)
+            maximumSelectedRest: maximumSelectedRest
         )
     }
     
@@ -326,9 +361,9 @@ nonisolated private extension FairRotationCandidateRanker {
     }
 }
 
-nonisolated private struct CandidateEvaluation: Sendable {
+nonisolated fileprivate struct CandidateEvaluation: Sendable {
     let candidate: MatchCandidate
-    let primaryPriority: PrimaryPriority
+    let primaryPriority: FairRotationPrimaryPriority
     let maximumMatchDeficit: Int
     let maximumWaitingExcess: Int
     let maximumSelectedRest: Int
@@ -338,12 +373,13 @@ nonisolated private struct CandidateEvaluation: Sendable {
     let canonicalKey: String
 }
 
-nonisolated private struct PrimaryPriority: Equatable, Comparable, Sendable {
+/// Internal minimax tuple shared by single-candidate and whole-batch participation evaluation.
+nonisolated struct FairRotationPrimaryPriority: Equatable, Comparable, Sendable {
     let worstDeficit: Int
     let participantsAtWorstDeficit: Int
     let aggregateDeficit: Int
     
-    static func < (lhs: PrimaryPriority, rhs: PrimaryPriority) -> Bool {
+    static func < (lhs: Self, rhs: Self) -> Bool {
         if lhs.worstDeficit != rhs.worstDeficit {
             return lhs.worstDeficit < rhs.worstDeficit
         }
@@ -398,7 +434,7 @@ nonisolated private extension ValueRange {
     }
 }
 
-nonisolated private struct HistorySnapshot: Sendable {
+nonisolated fileprivate struct HistorySnapshot: Sendable {
     private let statisticsByPlayerID: [Player.ID: ParticipationInputs]
     private let partnerCounts: [PlayerPair: Int]
     private let opponentCounts: [PlayerPair: Int]
@@ -469,7 +505,7 @@ nonisolated private struct HistorySnapshot: Sendable {
     }
 }
 
-nonisolated private struct ParticipationInputs: Sendable {
+nonisolated fileprivate struct ParticipationInputs: Sendable {
     let matchesPlayed: Int
     let consecutiveMatches: Int
     let consecutiveRests: Int
@@ -502,4 +538,66 @@ nonisolated private struct PlayerPair: Hashable, Sendable {
             self.secondPlayerID = firstPlayerID
         }
     }
+}
+
+nonisolated private struct ParticipationEvaluation {
+    let primaryPriority: FairRotationPrimaryPriority
+    let maximumMatchDeficit: Int
+    let maximumWaitingExcess: Int
+    let maximumSelectedRest: Int
+}
+
+/// Request-local assessment; numeric comparison inputs never enter suggestion models.
+nonisolated struct FairRotationAssessment: Sendable {
+    let suggestions: [MatchSuggestion]
+    fileprivate let evaluations: [CandidateEvaluation]
+    fileprivate let eligibleParticipants: [SessionParticipant]
+    fileprivate let history: HistorySnapshot
+    fileprivate let waitingThreshold: WaitingThreshold
+
+    func primaryPriority(selectedPlayerIDs: Set<Player.ID>) -> FairRotationPrimaryPriority {
+        FairRotationCandidateRanker().participation(
+            selectedPlayerIDs: selectedPlayerIDs, eligibleParticipants: eligibleParticipants,
+            history: history, waitingThreshold: waitingThreshold
+        ).primaryPriority
+    }
+
+    /// Materializes candidate costs alongside metadata in O(candidate count).
+    var batchOptions: [FairRotationBatchOption] {
+        zip(suggestions, evaluations).map { suggestion, evaluation in
+            FairRotationBatchOption(
+                suggestion: suggestion, playerIDs: Set(suggestion.candidate.playerIDs),
+                secondary: FairRotationSecondaryPriority(
+                    partners: evaluation.partnerRepetition, opponents: evaluation.opponentRepetition,
+                    consecutivePlay: evaluation.consecutivePlayCount
+                ), canonicalKey: evaluation.canonicalKey
+            )
+        }
+    }
+}
+
+/// A candidate's additive secondary costs, after whole-batch participation has been compared.
+nonisolated struct FairRotationSecondaryPriority: Equatable, Comparable, Sendable {
+    var partners = 0
+    var opponents = 0
+    var consecutivePlay = 0
+
+    func adding(_ other: Self) -> Self {
+        Self(partners: partners + other.partners, opponents: opponents + other.opponents,
+             consecutivePlay: consecutivePlay + other.consecutivePlay)
+    }
+
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        if lhs.partners != rhs.partners { return lhs.partners < rhs.partners }
+        if lhs.opponents != rhs.opponents { return lhs.opponents < rhs.opponents }
+        return lhs.consecutivePlay < rhs.consecutivePlay
+    }
+}
+
+/// Keeps original semantic metadata attached throughout dominance pruning and batch search.
+nonisolated struct FairRotationBatchOption: Sendable {
+    let suggestion: MatchSuggestion
+    let playerIDs: Set<Player.ID>
+    let secondary: FairRotationSecondaryPriority
+    let canonicalKey: String
 }

@@ -67,7 +67,8 @@ nonisolated struct UpcomingMatchGenerator: Sendable {
         }
     }
 
-    private func prepare(
+    /// Resolves the shared future pool and one transient opportunity for single or batch decisions.
+    func prepare(
         request: MatchmakingRequest,
         activeMatches: [ActiveMatchSnapshot]
     ) throws -> (request: MatchmakingRequest, projection: UpcomingParticipationProjection?) {

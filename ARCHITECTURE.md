@@ -51,10 +51,23 @@ no format field; this engine specifically composes the Fair Social ranker.
 relevant `ActiveMatchSnapshot` values. Enumeration and ranking share request eligibility.
 An optional ranker projection accounts for one current participation/wait opportunity without
 writing completed history or cached counters. The unchanged Fair Social comparison ranks the
-resulting candidates. See `M3_6_DESIGN.md` for projection assumptions and leaving-soon policy.
+resulting candidates. Playing participants need explicit authorization; leaving-soon players
+require an explicit whitelist even when present in an active snapshot.
 
 `UpcomingMatchSuggestion` captures selected active-player markers, with no reservation or
 `MatchStatus`. Pure revalidation checks current legality; regeneration refreshes ranking and
 metadata separately. Callers must remove completed snapshots and supply only active matches
-expected to finish before this slot. Multiple independent suggestions may overlap until M3.7
-introduces global reservations and court-specific ownership.
+expected to finish before this slot. Multiple independent suggestions may overlap.
+
+## Multi-court Fair Social generation
+
+`MultiCourtMatchScheduler` selects an exact maximum-cardinality set of non-overlapping
+suggestions for caller-supplied `Court.ID` slots. It reuses upcoming preparation and the
+ranker's request-local assessment. Primary participation fairness is evaluated once for the
+whole batch, followed by additive relationship costs and consecutive-play burden. Per-match
+metadata remains attached. Slots and winning candidates use canonical ordering.
+
+See `M3_7_DESIGN.md` for the exact partition search, dominance proof, capacity contract,
+and common-availability-horizon assumption. Batch revalidation reports conflicts without
+repairing state. Reservations are exclusive only inside the returned value; M4 must own
+atomic acceptance, persistence, and reconciliation of active snapshots with completed history.
