@@ -9,6 +9,7 @@ import Foundation
 
 nonisolated enum MatchHistoryEntryError: Error, Equatable, Sendable {
     case negativeSequence
+    case negativeOpportunitySequence
     case selectedPlayerWasNotEligible
 }
 
@@ -16,13 +17,19 @@ nonisolated struct MatchHistoryEntry: Codable, Hashable, Sendable {
     let sequence: Int
     let candidate: MatchCandidate
     let eligiblePlayerIDs: Set<Player.ID>
+    /// Explicitly groups simultaneous completions. Nil retains one opportunity per entry.
+    let opportunitySequence: Int?
     init(
         sequence: Int,
         candidate: MatchCandidate,
-        eligiblePlayerIDs: Set<Player.ID>? = nil
+        eligiblePlayerIDs: Set<Player.ID>? = nil,
+        opportunitySequence: Int? = nil
     ) throws {
         guard sequence >= 0 else {
             throw MatchHistoryEntryError.negativeSequence
+        }
+        if let opportunitySequence, opportunitySequence < 0 {
+            throw MatchHistoryEntryError.negativeOpportunitySequence
         }
         
         let eligiblePlayerIDs = eligiblePlayerIDs ?? Set(candidate.playerIDs)
@@ -33,12 +40,14 @@ nonisolated struct MatchHistoryEntry: Codable, Hashable, Sendable {
         self.sequence = sequence
         self.candidate = candidate
         self.eligiblePlayerIDs = eligiblePlayerIDs
+        self.opportunitySequence = opportunitySequence
     }
     
     private enum CodingKeys: String, CodingKey {
         case sequence
         case candidate
         case eligiblePlayerIDs
+        case opportunitySequence
     }
     
     init(from decoder: Decoder) throws {
@@ -54,7 +63,8 @@ nonisolated struct MatchHistoryEntry: Codable, Hashable, Sendable {
             try self.init(
                 sequence: sequence,
                 candidate: candidate,
-                eligiblePlayerIDs: eligiblePlayerIDs
+                eligiblePlayerIDs: eligiblePlayerIDs,
+                opportunitySequence: container.decodeIfPresent(Int.self, forKey: .opportunitySequence)
             )
         } catch {
             throw DecodingError.dataCorruptedError(
@@ -70,5 +80,6 @@ nonisolated struct MatchHistoryEntry: Codable, Hashable, Sendable {
         try container.encode(sequence, forKey: .sequence)
         try container.encode(candidate, forKey: .candidate)
         try container.encode(eligiblePlayerIDs, forKey: .eligiblePlayerIDs)
+        try container.encodeIfPresent(opportunitySequence, forKey: .opportunitySequence)
     }
 }

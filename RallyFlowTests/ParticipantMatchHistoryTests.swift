@@ -4,6 +4,58 @@ import Testing
 
 nonisolated struct ParticipantMatchHistoryTests {
     @Test
+    func simultaneousCourtsAdvanceOneEligibleOpportunity() throws {
+        let eligible = Set((1...9).map { id(UInt8($0)) })
+        let history = try ParticipantMatchHistory(entries: [
+            MatchHistoryEntry(sequence: 0, candidate: doublesCandidate([1, 2], [3, 4]),
+                              eligiblePlayerIDs: eligible, opportunitySequence: 0),
+            MatchHistoryEntry(sequence: 1, candidate: doublesCandidate([5, 6], [7, 8]),
+                              eligiblePlayerIDs: eligible, opportunitySequence: 0)
+        ])
+        #expect(history.statistics(for: id(9)).consecutiveRests == 1)
+        #expect(history.statistics(for: id(1)).consecutiveMatches == 1)
+        #expect(history.statistics(for: id(1)).consecutiveRests == 0)
+        #expect(history.statistics(for: id(5)).consecutiveMatches == 1)
+        #expect(history.statistics(for: id(5)).lastPlayedSequence == 1)
+        #expect(try JSONDecoder().decode(ParticipantMatchHistory.self, from: JSONEncoder().encode(history)) == history)
+    }
+
+    @Test
+    func simultaneousGroupsRejectAmbiguousOrOverlappingInput() throws {
+        let first = try doublesCandidate([1, 2], [3, 4])
+        let second = try doublesCandidate([5, 6], [7, 8])
+        let eligible = Set((1...9).map { id(UInt8($0)) })
+        let a = try MatchHistoryEntry(sequence: 0, candidate: first, eligiblePlayerIDs: eligible, opportunitySequence: 0)
+        #expect(throws: ParticipantMatchHistoryError.overlappingOpportunityParticipants(0)) {
+            try ParticipantMatchHistory(entries: [a, MatchHistoryEntry(sequence: 1, candidate: first,
+                eligiblePlayerIDs: eligible, opportunitySequence: 0)])
+        }
+        #expect(throws: ParticipantMatchHistoryError.inconsistentOpportunityEligibility(0)) {
+            try ParticipantMatchHistory(entries: [a, MatchHistoryEntry(sequence: 1, candidate: second, opportunitySequence: 0)])
+        }
+        #expect(throws: ParticipantMatchHistoryError.noncontiguousOpportunity(0)) {
+            try ParticipantMatchHistory(entries: [a, MatchHistoryEntry(sequence: 1, candidate: second),
+                MatchHistoryEntry(sequence: 2, candidate: second, eligiblePlayerIDs: eligible, opportunitySequence: 0)])
+        }
+        #expect(throws: MatchHistoryEntryError.negativeOpportunitySequence) {
+            try MatchHistoryEntry(sequence: 0, candidate: first, opportunitySequence: -1)
+        }
+    }
+
+    @Test
+    func legacyHistoryStillTreatsEachEntryAsAnOpportunity() throws {
+        let eligible = Set((1...9).map { id(UInt8($0)) })
+        let history = try ParticipantMatchHistory(entries: [
+            entry(0, [1, 2], [3, 4], eligiblePlayerIDs: eligible),
+            entry(1, [5, 6], [7, 8], eligiblePlayerIDs: eligible)
+        ])
+        #expect(history.statistics(for: id(9)).consecutiveRests == 2)
+        let data = try JSONEncoder().encode(history)
+        #expect(!String(decoding: data, as: UTF8.self).contains("opportunitySequence"))
+        #expect(try JSONDecoder().decode(ParticipantMatchHistory.self, from: data) == history)
+    }
+
+    @Test
     func derivesMatchCountsAndLastPlayedSequence() throws {
         let history = try ParticipantMatchHistory(entries: [
             entry(0, [1, 2], [3, 4]),

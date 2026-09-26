@@ -9,13 +9,18 @@ import Foundation
 
 nonisolated enum ParticipantMatchHistoryError: Error, Equatable, Sendable {
     case duplicateSequence(Int)
+    case noncontiguousOpportunity(Int)
+    case inconsistentOpportunityEligibility(Int)
+    case overlappingOpportunityParticipants(Int)
 }
 
 nonisolated struct ParticipantMatchHistory: Codable, Hashable, Sendable {
     let entries: [MatchHistoryEntry]
+    private let opportunities: [[MatchHistoryEntry]]
     
     init() {
         entries = []
+        opportunities = []
     }
     
     init(entries: [MatchHistoryEntry]) throws {
@@ -26,6 +31,27 @@ nonisolated struct ParticipantMatchHistory: Codable, Hashable, Sendable {
             }
         }
         self.entries = entries.sorted { $0.sequence < $1.sequence }
+        var groups: [[MatchHistoryEntry]] = []
+        var seenOpportunities: Set<Int> = []
+        for entry in self.entries {
+            if let opportunity = entry.opportunitySequence {
+                if let previous = groups.last, previous[0].opportunitySequence == opportunity {
+                    guard previous[0].eligiblePlayerIDs == entry.eligiblePlayerIDs else {
+                        throw ParticipantMatchHistoryError.inconsistentOpportunityEligibility(opportunity)
+                    }
+                    guard Set(previous.flatMap { $0.candidate.playerIDs }).isDisjoint(with: entry.candidate.playerIDs) else {
+                        throw ParticipantMatchHistoryError.overlappingOpportunityParticipants(opportunity)
+                    }
+                    groups[groups.count - 1].append(entry)
+                    continue
+                }
+                guard seenOpportunities.insert(opportunity).inserted else {
+                    throw ParticipantMatchHistoryError.noncontiguousOpportunity(opportunity)
+                }
+            }
+            groups.append([entry])
+        }
+        opportunities = groups
     }
     
     func matchesPlayed(for playerID: Player.ID) -> Int {
@@ -77,13 +103,13 @@ nonisolated struct ParticipantMatchHistory: Codable, Hashable, Sendable {
         var consecutiveRests = 0
         var lastPlayedSequence: Int?
         
-        for entry in entries {
-            if entry.candidate.contains(playerID: playerID) {
+        for opportunity in opportunities {
+            if let entry = opportunity.first(where: { $0.candidate.contains(playerID: playerID) }) {
                 matchesPlayed += 1
                 consecutiveMatches += 1
                 consecutiveRests = 0
                 lastPlayedSequence = entry.sequence
-            } else if entry.eligiblePlayerIDs.contains(playerID) {
+            } else if opportunity[0].eligiblePlayerIDs.contains(playerID) {
                 waitingRounds += 1
                 consecutiveMatches = 0
                 consecutiveRests += 1
@@ -116,7 +142,7 @@ nonisolated struct ParticipantMatchHistory: Codable, Hashable, Sendable {
             throw DecodingError.dataCorruptedError(
                 forKey: .entries,
                 in: container,
-                debugDescription: "Decoded match history contains duplicate sequences."
+                debugDescription: "Decoded match history has invalid sequence or opportunity grouping."
             )
         }
     }

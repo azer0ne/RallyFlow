@@ -30,6 +30,17 @@ Feature folders should be split by actual complexity rather than boilerplate. A 
 
 A waiting round means the player was eligible for that rotation but was not selected. A player omitted from the entry's eligible set is treated as voluntarily or operationally unavailable: the absence adds no waiting round and breaks both consecutive-play and consecutive-rest streaks. These are factual inputs only; their future relative priority belongs to M3.4.
 
+Simultaneous completions may carry an explicit `MatchHistoryEntry.opportunitySequence`.
+Entries in that group must be contiguous in match-sequence order, share eligibility, and
+have non-overlapping participants. History advances play/rest streaks once per group;
+match counts, relationships, and last-played sequence remain per completed match. Ungrouped
+entries retain one opportunity per match, including when decoding older history. Grouping
+must come from the caller's known scheduling opportunity, never inferred from court count.
+
+M3.8 simulation infrastructure lives in `RallyFlowTests/Simulation`. It independently checks
+trace metrics against history after every completed opportunity. The optional diagnostic runner
+compiles the same Core sources; it is not a separate matchmaking implementation.
+
 ## Immediate Fair Social generation
 
 `ImmediateMatchGenerator.generate(request:)` requires `.immediate` context and explicit
