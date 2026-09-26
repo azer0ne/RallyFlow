@@ -1,38 +1,28 @@
+//
+//  FairRotationCandidateRanker.swift
+//  RallyFlow
+//
+//  Created by Arez on 22/09/26.
+//
+
 import Foundation
 
-/// Errors caused by inconsistent candidate-ranking input.
 nonisolated enum FairRotationRankingError: Error, Equatable, Sendable {
-    /// A nonempty candidate collection requires explicit usable-court capacity.
     case missingCapacity
-
-    /// More than one participant record represents the same player.
     case duplicateParticipant(Player.ID)
-
-    /// No request participant is eligible for the scheduling context.
     case emptyEligibleParticipantPool
-
-    /// A candidate uses a different match type from the request.
     case candidateMatchTypeMismatch(expected: MatchType, actual: MatchType)
-
-    /// A candidate references a player absent from the request.
     case unknownParticipant(Player.ID)
-
-    /// A candidate references a participant outside the request's eligible pool.
     case ineligibleParticipant(Player.ID)
 }
 
-/// Orders valid candidates according to Fair Social Rotation policy.
 nonisolated struct FairRotationCandidateRanker: Sendable {
-    /// Returns highest-priority suggestions first without mutating request state.
-    ///
-    /// Equivalent candidate values are represented once. Empty candidate input returns an
-    /// empty result without requiring capacity because no fairness projection is performed.
     func rank(
         candidates: [MatchCandidate],
         request: MatchmakingRequest
     ) throws -> [MatchSuggestion] {
         guard !candidates.isEmpty else { return [] }
-
+        
         let participantByPlayerID = try validatedParticipants(request.participants)
         let eligibleParticipants = request.participants.filter {
             isEligible($0, for: request)
@@ -43,7 +33,7 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
         guard let capacity = request.capacity else {
             throw FairRotationRankingError.missingCapacity
         }
-
+        
         let eligiblePlayerIDs = eligibleParticipants.map(\.playerID)
         let eligiblePlayerIDSet = Set(eligiblePlayerIDs)
         let uniqueCandidates = deduplicated(candidates)
@@ -53,7 +43,7 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
             participantByPlayerID: participantByPlayerID,
             eligiblePlayerIDs: eligiblePlayerIDSet
         )
-
+        
         let waitingThreshold = try AdaptiveWaitingPolicy().threshold(
             eligibleParticipantCount: eligibleParticipants.count,
             playersPerMatch: request.matchType.playersPerMatch,
@@ -72,7 +62,7 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
             )
         }
         let explanationContext = ExplanationContext(evaluations: evaluations)
-
+        
         return evaluations.sorted(by: isHigherPriority).map {
             MatchSuggestion(
                 candidate: $0.candidate,
@@ -95,13 +85,13 @@ nonisolated private extension FairRotationCandidateRanker {
         }
         return result
     }
-
+    
     func isEligible(
         _ participant: SessionParticipant,
         for request: MatchmakingRequest
     ) -> Bool {
         guard request.eligibility.includes(participant.playerID) else { return false }
-
+        
         switch request.schedulingContext {
         case .immediate:
             return participant.status == .ready
@@ -114,7 +104,7 @@ nonisolated private extension FairRotationCandidateRanker {
             }
         }
     }
-
+    
     func validate(
         _ candidates: [MatchCandidate],
         request: MatchmakingRequest,
@@ -128,7 +118,7 @@ nonisolated private extension FairRotationCandidateRanker {
                     actual: candidate.matchType
                 )
             }
-
+            
             for playerID in candidate.playerIDs {
                 guard participantByPlayerID[playerID] != nil else {
                     throw FairRotationRankingError.unknownParticipant(playerID)
@@ -139,7 +129,7 @@ nonisolated private extension FairRotationCandidateRanker {
             }
         }
     }
-
+    
     func deduplicated(_ candidates: [MatchCandidate]) -> [MatchCandidate] {
         var seen: Set<MatchCandidate> = []
         return candidates.sorted {
@@ -148,7 +138,7 @@ nonisolated private extension FairRotationCandidateRanker {
             seen.insert($0).inserted
         }
     }
-
+    
     func evaluate(
         _ candidate: MatchCandidate,
         eligibleParticipants: [SessionParticipant],
@@ -158,17 +148,17 @@ nonisolated private extension FairRotationCandidateRanker {
         let selectedPlayerIDs = Set(candidate.playerIDs)
         let projectedMatchCounts = eligibleParticipants.map { participant in
             history.statistics(for: participant.playerID).matchesPlayed
-                + (selectedPlayerIDs.contains(participant.playerID) ? 1 : 0)
+            + (selectedPlayerIDs.contains(participant.playerID) ? 1 : 0)
         }
         let maximumProjectedMatchCount = projectedMatchCounts.max() ?? 0
-
+        
         var maximumMatchDeficit = 0
         var maximumWaitingExcess = 0
         var worstPrimaryDeficit = 0
         var primaryDeficits: [Int] = []
         var aggregatePrimaryDeficit = 0
         var maximumSelectedRest = 0
-
+        
         for (index, participant) in eligibleParticipants.enumerated() {
             let statistics = history.statistics(for: participant.playerID)
             let isSelected = selectedPlayerIDs.contains(participant.playerID)
@@ -179,22 +169,22 @@ nonisolated private extension FairRotationCandidateRanker {
                 projectedRest - waitingThreshold.expectedRestRounds
             )
             let primaryDeficit = max(matchDeficit, waitingExcess)
-
+            
             maximumMatchDeficit = max(maximumMatchDeficit, matchDeficit)
             maximumWaitingExcess = max(maximumWaitingExcess, waitingExcess)
             worstPrimaryDeficit = max(worstPrimaryDeficit, primaryDeficit)
             primaryDeficits.append(primaryDeficit)
             aggregatePrimaryDeficit += matchDeficit + waitingExcess
-
+            
             if isSelected {
                 maximumSelectedRest = max(maximumSelectedRest, statistics.consecutiveRests)
             }
         }
-
+        
         let participantsAtWorstDeficit = worstPrimaryDeficit == 0
-            ? 0
-            : primaryDeficits.count { $0 == worstPrimaryDeficit }
-
+        ? 0
+        : primaryDeficits.count { $0 == worstPrimaryDeficit }
+        
         return CandidateEvaluation(
             candidate: candidate,
             primaryPriority: PrimaryPriority(
@@ -210,12 +200,12 @@ nonisolated private extension FairRotationCandidateRanker {
             consecutivePlayCount: candidate.playerIDs.count { playerID in
                 let participant = eligibleParticipants.first { $0.playerID == playerID }
                 return history.statistics(for: playerID).consecutiveMatches > 0
-                    || participant?.status == .playing
+                || participant?.status == .playing
             },
             canonicalKey: canonicalKey(for: candidate)
         )
     }
-
+    
     func partnerRepetition(
         for candidate: MatchCandidate,
         history: HistorySnapshot
@@ -227,7 +217,7 @@ nonisolated private extension FairRotationCandidateRanker {
             $0 + history.partnerCount(between: $1.0, and: $1.1)
         }
     }
-
+    
     func opponentRepetition(
         for candidate: MatchCandidate,
         history: HistorySnapshot
@@ -241,7 +231,7 @@ nonisolated private extension FairRotationCandidateRanker {
             }
         }
     }
-
+    
     func teamPairs(in team: Team) -> [(Player.ID, Player.ID)] {
         guard team.playerIDs.count > 1 else { return [] }
         var pairs: [(Player.ID, Player.ID)] = []
@@ -252,7 +242,7 @@ nonisolated private extension FairRotationCandidateRanker {
         }
         return pairs
     }
-
+    
     func isHigherPriority(
         _ lhs: CandidateEvaluation,
         _ rhs: CandidateEvaluation
@@ -271,13 +261,13 @@ nonisolated private extension FairRotationCandidateRanker {
         }
         return lhs.canonicalKey < rhs.canonicalKey
     }
-
+    
     func reasons(
         for evaluation: CandidateEvaluation,
         context: ExplanationContext
     ) -> [SuggestionReason] {
         var reasons: [SuggestionReason] = []
-
+        
         if context.maximumMatchDeficitRange.isImproved(by: evaluation.maximumMatchDeficit) {
             reasons.append(.fewerMatchesPlayed)
         }
@@ -301,10 +291,10 @@ nonisolated private extension FairRotationCandidateRanker {
         if context.consecutivePlayRange.isImproved(by: evaluation.consecutivePlayCount) {
             reasons.append(.avoidsExcessiveConsecutivePlay)
         }
-
+        
         return reasons
     }
-
+    
     func warnings(for evaluation: CandidateEvaluation) -> [SuggestionWarning] {
         var warnings: [SuggestionWarning] = []
         if evaluation.partnerRepetition > 0 {
@@ -318,14 +308,14 @@ nonisolated private extension FairRotationCandidateRanker {
         }
         return warnings
     }
-
+    
     func canonicalKey(for candidate: MatchCandidate) -> String {
         candidate.matchType.rawValue + "|" + [
             playerKey(candidate.teamA.playerIDs),
             playerKey(candidate.teamB.playerIDs)
         ].sorted().joined(separator: "|")
     }
-
+    
     func representationKey(for candidate: MatchCandidate) -> String {
         [
             canonicalKey(for: candidate),
@@ -335,7 +325,7 @@ nonisolated private extension FairRotationCandidateRanker {
             candidate.teamB.playerIDs.map(\.uuidString).joined(separator: ":")
         ].joined(separator: "|")
     }
-
+    
     func playerKey(_ playerIDs: [Player.ID]) -> String {
         playerIDs.map(\.uuidString).sorted().joined(separator: ":")
     }
@@ -368,7 +358,7 @@ nonisolated private struct PrimaryPriority: Equatable, Comparable, Sendable {
     let worstDeficit: Int
     let participantsAtWorstDeficit: Int
     let aggregateDeficit: Int
-
+    
     static func < (lhs: PrimaryPriority, rhs: PrimaryPriority) -> Bool {
         if lhs.worstDeficit != rhs.worstDeficit {
             return lhs.worstDeficit < rhs.worstDeficit
@@ -383,11 +373,11 @@ nonisolated private struct PrimaryPriority: Equatable, Comparable, Sendable {
 nonisolated private struct ValueRange: Sendable {
     let minimum: Int
     let maximum: Int
-
+    
     func isImproved(by value: Int) -> Bool {
         minimum < maximum && value == minimum
     }
-
+    
     func isMaximized(by value: Int) -> Bool {
         minimum < maximum && value == maximum
     }
@@ -400,7 +390,7 @@ nonisolated private struct ExplanationContext: Sendable {
     let partnerRepetitionRange: ValueRange
     let opponentRepetitionRange: ValueRange
     let consecutivePlayRange: ValueRange
-
+    
     init(evaluations: [CandidateEvaluation]) {
         maximumMatchDeficitRange = ValueRange(
             evaluations.map(\.maximumMatchDeficit)
@@ -428,7 +418,7 @@ nonisolated private struct HistorySnapshot: Sendable {
     private let statisticsByPlayerID: [Player.ID: ParticipantMatchStatistics]
     private let partnerCounts: [PlayerPair: Int]
     private let opponentCounts: [PlayerPair: Int]
-
+    
     init(history: ParticipantMatchHistory, playerIDs: [Player.ID]) {
         statisticsByPlayerID = Dictionary(
             uniqueKeysWithValues: playerIDs.map {
@@ -437,7 +427,7 @@ nonisolated private struct HistorySnapshot: Sendable {
         )
         var partnerCounts: [PlayerPair: Int] = [:]
         var opponentCounts: [PlayerPair: Int] = [:]
-
+        
         for pair in Self.pairs(in: playerIDs) {
             let firstPlayerID = pair.firstPlayerID
             let secondPlayerID = pair.secondPlayerID
@@ -456,11 +446,11 @@ nonisolated private struct HistorySnapshot: Sendable {
                 opponentCounts[pair, default: 0] = opponentCount
             }
         }
-
+        
         self.partnerCounts = partnerCounts
         self.opponentCounts = opponentCounts
     }
-
+    
     func statistics(for playerID: Player.ID) -> ParticipantMatchStatistics {
         guard let statistics = statisticsByPlayerID[playerID] else {
             preconditionFailure(
@@ -469,15 +459,15 @@ nonisolated private struct HistorySnapshot: Sendable {
         }
         return statistics
     }
-
+    
     func partnerCount(between firstPlayerID: Player.ID, and secondPlayerID: Player.ID) -> Int {
         partnerCounts[PlayerPair(firstPlayerID, secondPlayerID), default: 0]
     }
-
+    
     func opponentCount(between firstPlayerID: Player.ID, and secondPlayerID: Player.ID) -> Int {
         opponentCounts[PlayerPair(firstPlayerID, secondPlayerID), default: 0]
     }
-
+    
     static func pairs(in playerIDs: [Player.ID]) -> [PlayerPair] {
         guard playerIDs.count > 1 else { return [] }
         var result: [PlayerPair] = []
@@ -493,7 +483,7 @@ nonisolated private struct HistorySnapshot: Sendable {
 nonisolated private struct PlayerPair: Hashable, Sendable {
     let firstPlayerID: Player.ID
     let secondPlayerID: Player.ID
-
+    
     init(_ firstPlayerID: Player.ID, _ secondPlayerID: Player.ID) {
         if firstPlayerID.uuidString < secondPlayerID.uuidString {
             self.firstPlayerID = firstPlayerID

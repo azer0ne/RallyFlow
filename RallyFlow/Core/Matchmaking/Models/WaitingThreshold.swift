@@ -1,11 +1,12 @@
-/// Capacity-derived context for interpreting eligible waiting streaks.
+//
+//  WaitingThreshold.swift
+//  RallyFlow
+//
+//  Created by Arez on 22/09/26.
+//
+
 nonisolated struct WaitingThreshold: Codable, Hashable, Sendable {
-    /// Participants considered for the scheduling opportunity.
     let eligibleParticipantCount: Int
-
-    /// Participants who can play simultaneously on the usable courts.
     let simultaneousPlayerCapacity: Int
-
-    /// Expected resting opportunities under the synchronized-round approximation.
     let expectedRestRounds: Int
 }
