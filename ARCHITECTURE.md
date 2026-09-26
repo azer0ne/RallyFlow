@@ -29,3 +29,18 @@ Feature folders should be split by actual complexity rather than boilerplate. A 
 `ParticipantMatchHistory` is the source of truth for completed-match facts used by matchmaking, including match counts, relationship counts, recency, and waiting derived from recorded rotation eligibility. The counters already present on `SessionParticipant` remain a current session-state snapshot for the future session engine; matchmaking history does not mutate or reconcile them.
 
 A waiting round means the player was eligible for that rotation but was not selected. A player omitted from the entry's eligible set is treated as voluntarily or operationally unavailable: the absence adds no waiting round and breaks both consecutive-play and consecutive-rest streaks. These are factual inputs only; their future relative priority belongs to M3.4.
+
+## Immediate Fair Social generation
+
+`ImmediateMatchGenerator.generate(request:)` requires `.immediate` context and explicit
+`MatchmakingCapacity`, including for an empty participant pool. It delegates eligibility and
+enumeration to `MatchCandidateGenerator`, passes the unchanged request and full candidate pool
+to `FairRotationCandidateRanker`, and returns its first suggestion or `nil` when no candidates
+exist. Ranking errors propagate unchanged; empty candidate pools retain the ranker's existing
+validation short circuit after context and capacity presence have been checked.
+
+Only ready participants can enter an immediate suggestion; explicit eligibility can narrow
+that pool but cannot admit playing participants. Multiple usable courts affect the adaptive
+waiting baseline, but one call returns at most one suggestion. Generation never reserves a
+player or court, changes participant counters or statuses, or appends history. The request has
+no format field; this engine specifically composes the Fair Social ranker.
