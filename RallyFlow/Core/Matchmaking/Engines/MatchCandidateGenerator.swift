@@ -23,24 +23,11 @@ nonisolated struct MatchCandidateGenerator: Sendable {
         var seenPlayerIDs: Set<Player.ID> = []
         
         return request.participants.compactMap { participant in
-            guard isEligible(participant, for: request),
+            guard request.isEligible(participant),
                   seenPlayerIDs.insert(participant.playerID).inserted else {
                 return nil
             }
             return participant.playerID
-        }
-    }
-    
-    private func isEligible(
-        _ participant: SessionParticipant,
-        for request: MatchmakingRequest
-    ) -> Bool {
-        switch request.schedulingContext {
-        case .immediate:
-            guard participant.status == .ready else { return false }
-            return request.eligibility.includes(participant.playerID)
-        case .upcoming:
-            return request.eligibility.includes(participant.playerID)
         }
     }
     
@@ -116,17 +103,6 @@ nonisolated struct MatchCandidateGenerator: Sendable {
             )
         } catch {
             preconditionFailure("Candidate enumeration produced an invalid player grouping.")
-        }
-    }
-}
-
-nonisolated private extension MatchmakingEligibility {
-    func includes(_ playerID: Player.ID) -> Bool {
-        switch self {
-        case .readyParticipants:
-            return true
-        case .explicit(let playerIDs):
-            return playerIDs.contains(playerID)
         }
     }
 }

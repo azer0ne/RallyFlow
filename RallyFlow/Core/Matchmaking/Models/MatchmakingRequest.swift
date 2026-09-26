@@ -35,4 +35,23 @@ nonisolated struct MatchmakingRequest: Codable, Hashable, Sendable {
         self.history = history
         self.capacity = capacity
     }
+
+    /// Upcoming playing/leaving-soon participants require explicit authorization.
+    /// Immediate requests never admit those statuses, even through an explicit whitelist.
+    func isEligible(_ participant: SessionParticipant) -> Bool {
+        if case .explicit(let playerIDs) = eligibility,
+           !playerIDs.contains(participant.playerID) {
+            return false
+        }
+        switch participant.status {
+        case .ready:
+            return true
+        case .playing, .leavingSoon:
+            guard schedulingContext == .upcoming else { return false }
+            if case .explicit = eligibility { return true }
+            return false
+        case .resting, .unavailable, .left:
+            return false
+        }
+    }
 }

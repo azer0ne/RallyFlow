@@ -14,18 +14,24 @@ nonisolated enum FairRotationRankingError: Error, Equatable, Sendable {
     case candidateMatchTypeMismatch(expected: MatchType, actual: MatchType)
     case unknownParticipant(Player.ID)
     case ineligibleParticipant(Player.ID)
+    case invalidProjectionContext
+    case invalidProjectedParticipant(Player.ID)
 }
 
 nonisolated struct FairRotationCandidateRanker: Sendable {
     func rank(
         candidates: [MatchCandidate],
-        request: MatchmakingRequest
+        request: MatchmakingRequest,
+        projection: UpcomingParticipationProjection? = nil
     ) throws -> [MatchSuggestion] {
+        if projection != nil, request.schedulingContext != .upcoming {
+            throw FairRotationRankingError.invalidProjectionContext
+        }
         guard !candidates.isEmpty else { return [] }
         
         let participantByPlayerID = try validatedParticipants(request.participants)
         let eligibleParticipants = request.participants.filter {
-            isEligible($0, for: request)
+            request.isEligible($0)
         }
         guard !eligibleParticipants.isEmpty else {
             throw FairRotationRankingError.emptyEligibleParticipantPool
@@ -36,6 +42,13 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
         
         let eligiblePlayerIDs = eligibleParticipants.map(\.playerID)
         let eligiblePlayerIDSet = Set(eligiblePlayerIDs)
+        for playerID in (projection?.activePlayerIDs ?? []).sorted(by: { $0.uuidString < $1.uuidString }) {
+            guard eligiblePlayerIDSet.contains(playerID),
+                  let participant = participantByPlayerID[playerID],
+                  participant.status == .playing || participant.status == .leavingSoon else {
+                throw FairRotationRankingError.invalidProjectedParticipant(playerID)
+            }
+        }
         let uniqueCandidates = deduplicated(candidates)
         try validate(
             uniqueCandidates,
@@ -51,7 +64,8 @@ nonisolated struct FairRotationCandidateRanker: Sendable {
         )
         let historySnapshot = HistorySnapshot(
             history: request.history,
-            playerIDs: eligiblePlayerIDs
+            playerIDs: eligiblePlayerIDs,
+            projection: projection
         )
         let evaluations = uniqueCandidates.map {
             evaluate(
@@ -84,25 +98,6 @@ nonisolated private extension FairRotationCandidateRanker {
             }
         }
         return result
-    }
-    
-    func isEligible(
-        _ participant: SessionParticipant,
-        for request: MatchmakingRequest
-    ) -> Bool {
-        guard request.eligibility.includes(participant.playerID) else { return false }
-        
-        switch request.schedulingContext {
-        case .immediate:
-            return participant.status == .ready
-        case .upcoming:
-            switch request.eligibility {
-            case .readyParticipants:
-                return participant.status == .ready
-            case .explicit:
-                return participant.status == .ready || participant.status == .playing
-            }
-        }
     }
     
     func validate(
@@ -331,17 +326,6 @@ nonisolated private extension FairRotationCandidateRanker {
     }
 }
 
-nonisolated private extension MatchmakingEligibility {
-    func includes(_ playerID: Player.ID) -> Bool {
-        switch self {
-        case .readyParticipants:
-            return true
-        case .explicit(let playerIDs):
-            return playerIDs.contains(playerID)
-        }
-    }
-}
-
 nonisolated private struct CandidateEvaluation: Sendable {
     let candidate: MatchCandidate
     let primaryPriority: PrimaryPriority
@@ -415,14 +399,19 @@ nonisolated private extension ValueRange {
 }
 
 nonisolated private struct HistorySnapshot: Sendable {
-    private let statisticsByPlayerID: [Player.ID: ParticipantMatchStatistics]
+    private let statisticsByPlayerID: [Player.ID: ParticipationInputs]
     private let partnerCounts: [PlayerPair: Int]
     private let opponentCounts: [PlayerPair: Int]
     
-    init(history: ParticipantMatchHistory, playerIDs: [Player.ID]) {
+    init(
+        history: ParticipantMatchHistory,
+        playerIDs: [Player.ID],
+        projection: UpcomingParticipationProjection?
+    ) {
         statisticsByPlayerID = Dictionary(
             uniqueKeysWithValues: playerIDs.map {
-                ($0, history.statistics(for: $0))
+                ($0, ParticipationInputs(statistics: history.statistics(for: $0),
+                                         playerID: $0, projection: projection))
             }
         )
         var partnerCounts: [PlayerPair: Int] = [:]
@@ -451,7 +440,7 @@ nonisolated private struct HistorySnapshot: Sendable {
         self.opponentCounts = opponentCounts
     }
     
-    func statistics(for playerID: Player.ID) -> ParticipantMatchStatistics {
+    func statistics(for playerID: Player.ID) -> ParticipationInputs {
         guard let statistics = statisticsByPlayerID[playerID] else {
             preconditionFailure(
                 "Validated eligible participant is missing from the history snapshot."
@@ -477,6 +466,26 @@ nonisolated private struct HistorySnapshot: Sendable {
             }
         }
         return result
+    }
+}
+
+nonisolated private struct ParticipationInputs: Sendable {
+    let matchesPlayed: Int
+    let consecutiveMatches: Int
+    let consecutiveRests: Int
+
+    init(statistics: ParticipantMatchStatistics, playerID: Player.ID,
+         projection: UpcomingParticipationProjection?) {
+        guard let projection else {
+            matchesPlayed = statistics.matchesPlayed
+            consecutiveMatches = statistics.consecutiveMatches
+            consecutiveRests = statistics.consecutiveRests
+            return
+        }
+        let isActive = projection.activePlayerIDs.contains(playerID)
+        matchesPlayed = statistics.matchesPlayed + (isActive ? 1 : 0)
+        consecutiveMatches = isActive ? statistics.consecutiveMatches + 1 : 0
+        consecutiveRests = isActive ? 0 : statistics.consecutiveRests + 1
     }
 }
 

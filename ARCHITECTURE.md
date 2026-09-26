@@ -44,3 +44,17 @@ that pool but cannot admit playing participants. Multiple usable courts affect t
 waiting baseline, but one call returns at most one suggestion. Generation never reserves a
 player or court, changes participant counters or statuses, or appends history. The request has
 no format field; this engine specifically composes the Fair Social ranker.
+
+## Upcoming Fair Social generation
+
+`UpcomingMatchGenerator` resolves a future-eligible pool for one slot from the roster and
+relevant `ActiveMatchSnapshot` values. Enumeration and ranking share request eligibility.
+An optional ranker projection accounts for one current participation/wait opportunity without
+writing completed history or cached counters. The unchanged Fair Social comparison ranks the
+resulting candidates. See `M3_6_DESIGN.md` for projection assumptions and leaving-soon policy.
+
+`UpcomingMatchSuggestion` captures selected active-player markers, with no reservation or
+`MatchStatus`. Pure revalidation checks current legality; regeneration refreshes ranking and
+metadata separately. Callers must remove completed snapshots and supply only active matches
+expected to finish before this slot. Multiple independent suggestions may overlap until M3.7
+introduces global reservations and court-specific ownership.
